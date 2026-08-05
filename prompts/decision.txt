@@ -6,11 +6,17 @@ CURRENT INTERVIEW STATUS:
 - Latest Evaluation Metrics:
 {evaluation_json}
 
-DECISION RULES:
+DECISION & DIFFICULTY BALANCING RULES:
 1. "probe_deeper": Select if `follow_up_needed` is true, OR if `depth` or `technical` score is < 6, AND we have not already probed deeper twice in a row.
-2. "increase_difficulty": Select if average score across metrics >= 8.0 AND current difficulty is not already "Hard".
+2. "increase_difficulty": Select if average score across metrics >= 7.0, OR if we are in the final 2 rounds (Round >= max_rounds - 1) and have not presented a "Hard" question yet.
 3. "decrease_difficulty": Select if `technical` or `clarity` score < 5 AND current difficulty is not already "Easy".
-4. "move_next_topic": Default action when performance is satisfactory and topic is covered, moving smoothly to the next interview dimension.
+4. "move_next_topic": Default action when performance is satisfactory.
+
+SESSION DIFFICULTY DISTRIBUTION GUARANTEE:
+- Ensure the candidate experiences a complete difficulty spectrum across the session:
+  - Round 1: "Easy" (Baseline warm-up)
+  - Middle Rounds: "Medium" (Core competency testing)
+  - Final Round(s): "Hard" (Advanced depth & edge-case challenge)
 
 YOUR TASK:
 Analyze the evaluator metrics and select the optimal next directive and target difficulty level.

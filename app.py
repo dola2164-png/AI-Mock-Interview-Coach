@@ -146,7 +146,7 @@ if "current_question_index" not in st.session_state:
 if "max_questions" not in st.session_state:
     st.session_state.max_questions = 5
 if "current_difficulty" not in st.session_state:
-    st.session_state.current_difficulty = "Medium"
+    st.session_state.current_difficulty = "Easy"
 if "question_history" not in st.session_state:
     st.session_state.question_history = []
 if "latest_question" not in st.session_state:
@@ -227,7 +227,7 @@ if start_button:
         st.session_state.interview_complete = False
         st.session_state.current_question_index = 0
         st.session_state.max_questions = max_questions
-        st.session_state.current_difficulty = "Medium"
+        st.session_state.current_difficulty = "Easy"
         st.session_state.question_history = []
         st.session_state.messages = []
         st.session_state.latest_evaluation = None
@@ -240,7 +240,7 @@ if start_button:
                     target_role=target_role,
                     resume_snippet=resume_snippet,
                     interview_type=interview_type,
-                    current_difficulty="Medium",
+                    current_difficulty="Easy",
                     decision_action="move_next_topic",
                     question_history=[],
                     api_key=api_key,
@@ -248,7 +248,7 @@ if start_button:
                 )
                 st.session_state.latest_question = res["question"]
                 st.session_state.latest_question_reason = res["reason"]
-                st.session_state.current_difficulty = res.get("difficulty", "Medium")
+                st.session_state.current_difficulty = res.get("difficulty", "Easy")
                 
                 st.session_state.messages.append({
                     "role": "assistant",
