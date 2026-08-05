@@ -1,71 +1,127 @@
-# Enterprise Multi-Agent AI Interview & Coaching Platform 💼
+# 🎯 AI Mock Interview Coach
 
-An adaptive, multi-agent AI candidate assessment and coaching system built with **LangGraph**, **Streamlit**, and **Groq (Llama 3.3 70B)**. Designed to conduct realistic, role-tailored mock interviews and deliver executive competency reports.
+**An adaptive, multi-agent AI system that conducts realistic mock interviews and delivers executive-grade coaching reports.**
+
+Built with **LangGraph** · **Streamlit** · **Groq (Llama 3.3 70B)**
+
+[![Python](https://img.shields.io/badge/Python-3.10+-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![LangGraph](https://img.shields.io/badge/LangGraph-StateGraph-1C3C3C)](https://www.langchain.com/langgraph)
+[![Streamlit](https://img.shields.io/badge/Streamlit-App-FF4B4B?logo=streamlit&logoColor=white)](https://streamlit.io/)
+[![Groq](https://img.shields.io/badge/Groq-Llama%203.3%2070B-F55036)](https://groq.com/)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](#license)
+
+> Give it a target role, a resume snippet, and a focus area — it runs a live 5–7 turn interview that probes weak answers, rewards strong ones, and ends with a structured coaching report and a 7-day practice plan.
 
 ---
 
-## 🌟 Architecture & Multi-Agent Design
+## 📖 Table of Contents
 
-The platform coordinates **4 specialized AI agents** using a stateful **LangGraph** `StateGraph` flow:
+- [Why This Exists](#-why-this-exists)
+- [Architecture Overview](#-architecture-overview)
+- [Agent Roles & Responsibilities](#-agent-roles--responsibilities)
+- [Orchestration Logic](#-orchestration-logic)
+- [Repository Structure](#-repository-structure)
+- [Quick Start](#-quick-start)
+- [Key Design Decisions & Trade-offs](#-key-design-decisions--trade-offs)
+- [Example Interview Transcripts](#-example-interview-transcripts)
+- [Assignment Requirements Mapping](#-assignment-requirements-mapping)
+- [Roadmap](#-roadmap)
 
+---
+
+## 💡 Why This Exists
+
+Most "mock interview" tools ask a fixed list of questions and grade on vibes. This system instead treats the interview as a **closed control loop**: an evaluator scores every answer across five dimensions, a decision agent reads those scores and decides what happens next (probe deeper, raise the bar, ease off, or move on), and a coach synthesizes the whole transcript into actionable feedback — the same way a real panel debrief works.
+
+---
+
+## 🏗 Architecture Overview
+
+Four specialized agents are coordinated through a stateful **LangGraph `StateGraph`**, with the Decision Agent acting as the conditional router that keeps the interview looping until a stopping condition is met.
+
+```mermaid
+flowchart TD
+    UI["🖥️ Candidate UI\n(Streamlit)"] --> INT
+
+    subgraph LOOP["Interview Loop — repeats for 5–7 rounds"]
+        direction TB
+        INT["🎤 Agent 1: Interviewer\nAsks tailored question"] --> EVAL
+        EVAL["📊 Agent 2: Evaluator\nScores answer (5 dimensions)\n→ structured JSON"] --> DEC
+        DEC{"🧭 Agent 3: Decision Agent\nReads scores, picks next action"}
+    end
+
+    DEC -- "probe_deeper" --> INT
+    DEC -- "increase_difficulty" --> INT
+    DEC -- "decrease_difficulty" --> INT
+    DEC -- "move_next_topic" --> INT
+    DEC -- "max rounds reached" --> COACH
+
+    COACH["🧑‍🏫 Agent 4: Coach\nSynthesizes full transcript"] --> REPORT["📄 Executive Assessment Report\n(Markdown)"]
+
+    style UI fill:#e8f0fe,stroke:#4285f4
+    style INT fill:#fef7e0,stroke:#f9ab00
+    style EVAL fill:#fce8e6,stroke:#ea4335
+    style DEC fill:#e6f4ea,stroke:#34a853
+    style COACH fill:#f3e8fd,stroke:#a142f4
+    style REPORT fill:#e8f0fe,stroke:#4285f4
 ```
-                                  +-----------------------+
-                                  |     Candidate UI      |
-                                  +-----------+-----------+
-                                              |
-                                              v
-                                  +-----------------------+
-                                  |   Interviewer Agent   |<------+
-                                  +-----------+-----------+       |
-                                              |                   |
-                                              v                   |
-                                  +-----------------------+       | (Rounds 1 to 5-7)
-                                  |    Evaluator Agent    |       |
-                                  +-----------+-----------+       |
-                                              |                   |
-                                              v                   |
-                                  +-----------------------+       |
-                                  |    Decision Agent     +-------+
-                                  +-----------+-----------+
-                                              | (After max rounds)
-                                              v
-                                  +-----------------------+
-                                  |      Coach Agent      |
-                                  +-----------+-----------+
-                                              |
-                                              v
-                                  +-----------------------+
-                                  | Executive Report (.md)|
-                                  +-----------------------+
+
+**State flows through a single `InterviewState` object** (see `graph/state.py`) that accumulates the transcript, running scores, current difficulty, and topic history — so every agent has full context without re-fetching anything.
+
+---
+
+## 🤖 Agent Roles & Responsibilities
+
+| # | Agent | File | Persona | Core Function |
+|---|-------|------|---------|----------------|
+| 1 | **Interviewer** | `agents/interviewer.py` | Professional, empathetic senior technical interviewer | Formulates tailored questions from target role, resume snippet, session focus, and current difficulty. Follows action directives from the Decision Agent (`probe_deeper`, `move_next_topic`, etc.) |
+| 2 | **Evaluator** | `agents/evaluator.py` | Strict, objective candidate assessor | Scores each answer 1–10 across **technical, communication, confidence, clarity, depth**. Outputs a validated Pydantic JSON object with scores, identified weakness, and a `follow_up_needed` flag |
+| 3 | **Decision Agent** | `agents/decision.py` | Adaptive interview controller | Reads the Evaluator's JSON and routes the graph: probe deeper on weak/incomplete answers, scale difficulty up or down, or advance the topic |
+| 4 | **Coach** | `agents/coach.py` | Executive career coach & lead technical reviewer | Synthesizes the full transcript + scorecards into a Markdown **Executive Assessment Report**: overall score, strengths, gaps, communication tips, and a 7-day practice plan |
+
+### Decision Agent routing rules
+
+| Trigger | Directive | Effect |
+|---|---|---|
+| Technical score `< 6/10` **or** `follow_up_needed = true` | `probe_deeper` | Same topic, deeper sub-question, same difficulty |
+| All metrics `≥ 8.0` | `increase_difficulty` | Medium → Hard (or Hard stays Hard, moves topic) |
+| Technical score `< 5.0` | `decrease_difficulty` | Drops to Easy, rebuilds foundational confidence |
+| Solid, complete answer | `move_next_topic` | Default progression to a new topic area |
+
+---
+
+## 🔄 Orchestration Logic
+
+```mermaid
+sequenceDiagram
+    participant C as Candidate
+    participant I as Interviewer Agent
+    participant E as Evaluator Agent
+    participant D as Decision Agent
+    participant Co as Coach Agent
+
+    C->>I: Role, resume snippet, focus area
+    loop Rounds 1 to 5–7
+        I->>C: Tailored question
+        C->>I: Answer
+        I->>E: Question + Answer + context
+        E->>D: JSON scorecard (5 dims + weakness + follow_up_needed)
+        D->>D: Evaluate routing rules
+        alt weak / incomplete
+            D->>I: probe_deeper
+        else strong (>=8.0 avg)
+            D->>I: increase_difficulty
+        else technical < 5.0
+            D->>I: decrease_difficulty
+        else solid answer
+            D->>I: move_next_topic
+        end
+    end
+    D->>Co: Full transcript + all scorecards
+    Co->>C: Executive Assessment Report (.md)
 ```
 
-### Agent Roles & Responsibilities
-
-1. **Agent 1 — Interviewer (`agents/interviewer.py`)**
-   - **Persona**: Professional, empathetic, senior technical interviewer.
-   - **Function**: Formulates tailored interview questions based on target role, resume snippet, session focus (Technical / Behavioral / Case Study / Mixed), and target difficulty. Follows action directives (`probe_deeper`, `move_next_topic`) passed from the Decision Agent.
-
-2. **Agent 2 — Evaluator (`agents/evaluator.py`)**
-   - **Persona**: Strict, objective candidate evaluator.
-   - **Function**: Evaluates responses across 5 core dimensions on a 1–10 scale:
-     - `technical`: Concept correctness & domain accuracy
-     - `communication`: Professional phrasing & structure
-     - `confidence`: Tone assertiveness & lack of hedging
-     - `clarity`: Directness and conciseness
-     - `depth`: Technical granularity & STAR method detail
-   - **Output**: Validated Pydantic JSON structure containing scores, identified weakness, and `follow_up_needed` boolean flag.
-
-3. **Agent 3 — Decision Agent (`agents/decision.py`)**
-   - **Persona**: Adaptive interview controller.
-   - **Function**: Analyzes evaluator JSON output and dictates the next step:
-     - `probe_deeper`: Triggers when technical depth is low (<6/10) or `follow_up_needed` is true.
-     - `increase_difficulty`: Scales difficulty from Medium to Hard when candidate scores >= 8.0 across metrics.
-     - `decrease_difficulty`: Lowers difficulty to Easy when technical scores drop < 5.0.
-     - `move_next_topic`: Default progression when performance is satisfactory.
-
-4. **Agent 4 — Coach Agent (`agents/coach.py`)**
-   - **Persona**: Executive career coach & lead technical reviewer.
-   - **Function**: Synthesizes the complete transcript and evaluator scorecards into an **Executive Assessment Report** (Markdown format) featuring overall score, core strengths, technical gaps, communication tips, and a 7-Day custom practice plan.
+This is what distinguishes the system from "three prompts in a chain": the **Decision Agent's routing is conditional and stateful** — it changes the Interviewer's next move based on accumulated evidence, not a fixed script.
 
 ---
 
@@ -91,186 +147,178 @@ ai-interview-coach/
 ├── .streamlit/
 │   └── config.toml       # Streamlit client configuration
 ├── app.py                # Streamlit UI & Interactive Multi-Agent Inspector
-├── config.py             # LLM setup & Groq API key manager
-├── requirements.txt      # Project dependencies
-└── README.md             # Technical documentation & transcripts
+├── config.py              # LLM setup & Groq API key manager
+├── requirements.txt       # Project dependencies
+└── README.md              # This file
 ```
 
 ---
 
-## 🚀 Quick Start Guide
+## 🚀 Quick Start
 
 ### 1. Prerequisites
-- Python 3.10 or higher
-- A free **Groq API Key** from [console.groq.com](https://console.groq.com)
+- Python 3.10+
+- A free **Groq API key** from [console.groq.com](https://console.groq.com)
 
 ### 2. Environment Setup
 
 ```bash
-# Navigate to project root
+# Clone and enter the project
+git clone https://github.com/<your-username>/ai-interview-coach.git
 cd ai-interview-coach
 
-# Create virtual environment
+# Create & activate a virtual environment
 python -m venv .venv
 
-# Activate virtual environment
-# Windows (PowerShell):
+# Windows (PowerShell)
 .venv\Scripts\Activate.ps1
-# macOS / Linux:
+# macOS / Linux
 source .venv/bin/activate
 
 # Install dependencies
 pip install -r requirements.txt
 ```
 
-### 3. API Key Configuration
+### 3. Configure your API key
 
 Create a `.env` file in the project root:
+
 ```env
 GROQ_API_KEY=gsk_your_free_groq_api_key_here
 ```
-*(Key is loaded privately from `.env` and never displayed on the UI).*
 
-### 4. Launch Application
+> The key is loaded privately from `.env` via `config.py` and is never rendered in the UI.
+
+### 4. Run it
 
 ```bash
 streamlit run app.py
 ```
-Open browser at `http://localhost:8501`.
+
+Then open **http://localhost:8501** and start your session: pick a target role, paste an optional resume snippet, choose a focus area (Behavioral / Technical / Case Study / Mixed), and begin.
 
 ---
 
-## 💡 Key Design Decisions & Trade-offs
+## 🧠 Key Design Decisions & Trade-offs
 
-1. **LangGraph vs Linear Chain**:
-   - *Decision*: Used LangGraph `StateGraph` for explicit node routing and state persistence.
-   - *Trade-off*: Slightly higher graph setup complexity vs a linear chain, but allows true conditional branching (`probe_deeper`, difficulty scaling) based on evaluator metrics.
-
-2. **Groq (Llama 3.3 70B) LLM Engine**:
-   - *Decision*: Adopted Groq for ultra-fast, 100% free LLM inference with zero latency bottlenecks during multi-agent turns.
-
-3. **Externalized Prompts (`prompts/`)**:
-   - *Decision*: Separated all system prompts into raw `.txt` files in `prompts/`.
-   - *Trade-off*: Eliminates code bloat and enables prompt iteration without touching python code.
-
-4. **Dynamic Scoring vs Anchor Bias Prevention**:
-   - *Decision*: Removed fixed numerical examples in `prompts/evaluator.txt` and enforced explicit dynamic grading rules based on exact answer quality.
+| Decision | Why | Trade-off |
+|---|---|---|
+| **LangGraph `StateGraph`** over a linear chain | Enables true conditional branching (`probe_deeper`, difficulty scaling) driven by evaluator metrics, not a fixed script | More setup complexity than a simple `A → B → C` chain |
+| **Groq / Llama 3.3 70B** as the inference engine | Very low latency across multi-agent turns, at no cost — important when a single round triggers 2–3 chained LLM calls | Slightly less nuanced than top-tier closed models on edge-case reasoning |
+| **Externalized prompts** (`prompts/*.txt`) | Keeps persona/prompt iteration decoupled from application code; non-engineers could tune tone without touching Python | One extra file read per agent call; requires prompts and Pydantic schemas to stay in sync |
+| **Dynamic scoring, no anchor examples** | Removed fixed numeric examples from `evaluator.txt` to prevent the LLM from anchoring on sample scores instead of grading the actual answer | Slightly higher variance in edge-case scoring, mitigated by the strict rubric in the prompt |
+| **Structured Pydantic output for the Evaluator** | Guarantees the Decision Agent always receives parseable, schema-valid JSON to route on | Requires retry/validation handling if the LLM emits malformed JSON |
 
 ---
 
 ## 📝 Example Interview Transcripts
 
-### Transcript 1: Strong Candidate (Frontend Engineer Intern)
-**Role**: Frontend Engineer Intern | **Focus**: Mixed | **Rounds**: 3
+### 1️⃣ Strong Candidate — Frontend Engineer Intern
+**Focus:** Mixed · **Rounds:** 3
 
-```markdown
-### Round 1 (Medium Difficulty)
-Interviewer Question: "Can you explain the concept of progressive enhancement in web development and how you would implement it?"
-Candidate Answer: "Progressive enhancement is a design strategy where we build a basic working core HTML/CSS structure first for all devices/browsers, and then add advanced JavaScript capabilities like client-side validation, SPA routing, and dynamic search suggestions for modern browsers."
+<details>
+<summary><b>Show full transcript</b></summary>
 
-Evaluator Scorecard:
-- Technical: 9/10 | Communication: 9/10 | Confidence: 8/10 | Clarity: 9/10 | Depth: 8/10
-- Weakness: "Could have mentioned specific fallback strategies or aria-live accessibility attributes for screen readers."
-- Follow-up Needed: False
+**Round 1 (Medium)**
+> **Q:** Can you explain progressive enhancement in web development and how you'd implement it?
+> **A:** "Progressive enhancement is a design strategy where we build a basic working core HTML/CSS structure first for all devices/browsers, then add advanced JavaScript capabilities like client-side validation, SPA routing, and dynamic search suggestions for modern browsers."
 
-Decision Agent Directive: `increase_difficulty`
-- Reasoning: Candidate demonstrated exceptional clarity and architectural understanding. Scaling difficulty to Hard.
+**Scorecard:** Technical `9` · Communication `9` · Confidence `8` · Clarity `9` · Depth `8`
+**Weakness noted:** Could mention fallback strategies or `aria-live` accessibility attributes.
+**Directive:** `increase_difficulty` — exceptional architectural clarity, scale up.
 
----
+**Round 2 (Hard)**
+> **Q:** How would you handle state management and performance optimization in a large React app with high-frequency WebSocket updates?
+> **A:** "I would decouple high-frequency WebSocket state from the main React render tree using a dedicated store like Zustand or RxJS. To prevent UI jank, I'd batch updates with `requestAnimationFrame` or React 18's `useDeferredValue`, and memoize heavy sub-trees with `React.memo`."
 
-### Round 2 (Hard Difficulty)
-Interviewer Question: "How would you handle state management and performance optimization in a large React app with high-frequency WebSocket updates?"
-Candidate Answer: "I would decouple high-frequency WebSocket state from the main React component render tree using a dedicated store like Zustand or RxJS. To prevent UI jank, I would batch updates using requestAnimationFrame or React 18 useDeferredValue, and memoize heavy sub-trees with React.memo."
+**Scorecard:** Technical `9` · Communication `9` · Confidence `9` · Clarity `9` · Depth `9`
+**Directive:** `move_next_topic` — clean coverage of rendering pipeline, batching, decoupling.
 
-Evaluator Scorecard:
-- Technical: 9/10 | Communication: 9/10 | Confidence: 9/10 | Clarity: 9/10 | Depth: 9/10
-- Weakness: "None noted; candidate covered rendering pipeline, batching, and decoupling cleanly."
-- Follow-up Needed: False
+**Executive Summary:** **92/100** — Outstanding, Ready for Placement
 
-Decision Agent Directive: `move_next_topic`
-- Reasoning: Exceptional response under Hard difficulty. Moving to system design trade-offs.
+</details>
 
----
+### 2️⃣ Weak Candidate — Data Analyst Intern
+**Focus:** Technical · **Rounds:** 2
 
-Executive Report Summary:
-- Overall Score: 92/100
-- Category: Outstanding (Ready for Placement)
-```
+<details>
+<summary><b>Show full transcript</b></summary>
 
----
+**Round 1 (Medium)**
+> **Q:** How do you handle missing values in a SQL dataset before running an aggregation query?
+> **A:** "I just delete the rows with nulls or use `AVG()`."
 
-### Transcript 2: Weak Candidate (Data Analyst Intern)
-**Role**: Data Analyst Intern | **Focus**: Technical | **Rounds**: 2
+**Scorecard:** Technical `4` · Communication `5` · Confidence `5` · Clarity `6` · Depth `3`
+**Weakness noted:** No mention of `COALESCE`/`NULLIF`, imputation strategies, or row-deletion vs. aggregate-distortion trade-offs.
+**Directive:** `probe_deeper` — technical depth below threshold.
 
-```markdown
-### Round 1 (Medium Difficulty)
-Interviewer Question: "How do you handle missing values in a SQL dataset before running an aggregation query?"
-Candidate Answer: "I just delete the rows with nulls or use AVG()."
+**Round 2 (Medium, probing)**
+> **Q:** What specific SQL function would replace NULL values with 0 in a SELECT query?
+> **A:** "Maybe `IFNULL` or something? I'm not sure of the exact function name."
 
-Evaluator Scorecard:
-- Technical: 4/10 | Communication: 5/10 | Confidence: 5/10 | Clarity: 6/10 | Depth: 3/10
-- Weakness: "Candidate fails to explain NULL handling functions (COALESCE, NULLIF), imputation strategies, or the difference between row deletion vs aggregate distortion."
-- Follow-up Needed: True
+**Scorecard:** Technical `4` · Communication `4` · Confidence `3` · Clarity `5` · Depth `2`
+**Directive:** `decrease_difficulty` — foundational gap confirmed, drop to Easy.
 
-Decision Agent Directive: `probe_deeper`
-- Reasoning: Technical depth score is below 6. Probing deeper into SQL NULL handling syntax without scaling difficulty.
+**Executive Summary:** **45/100** — Needs Foundational Revision in SQL & Data Imputation
 
----
+</details>
 
-### Round 2 (Medium Difficulty - Probe Deeper)
-Interviewer Question: "Can you provide the specific SQL function you would use to replace NULL values with a default value of 0 in a SELECT query?"
-Candidate Answer: "Maybe IF NULL or something? I am not sure of the exact function name."
+### 3️⃣ Tricky / Edge Case — Product Manager Intern
+**Focus:** Case Study · **Rounds:** 2
 
-Evaluator Scorecard:
-- Technical: 4/10 | Communication: 4/10 | Confidence: 3/10 | Clarity: 5/10 | Depth: 2/10
-- Weakness: "Candidate lacks basic familiarity with standard SQL COALESCE or IFNULL functions."
-- Follow-up Needed: False
+<details>
+<summary><b>Show full transcript</b></summary>
 
-Decision Agent Directive: `decrease_difficulty`
-- Reasoning: Technical score < 5. Decreasing target difficulty to Easy for foundational concepts.
+**Round 1 (Medium)**
+> **Q:** How would you measure the success of launching a feature like Instagram Stories on a professional network platform?
+> **A:** "I don't know much about metrics, maybe I'd just ask users if they like it or check if downloads go up."
 
----
+**Scorecard:** Technical `3` · Communication `4` · Confidence `3` · Clarity `5` · Depth `2`
+**Weakness noted:** Evasive "I don't know" reply, no structured metrics framework (DAU, Retention, Adoption Rate).
+**Directive:** `probe_deeper` — simplify the question to test recovery.
 
-Executive Report Summary:
-- Overall Score: 45/100
-- Category: Needs Foundational Revision in SQL & Data Imputation
-```
+**Round 2 (Medium, structured recovery)**
+> **Q:** Let's break it down — what's one key engagement action you'd track daily to see if people use the new feature?
+> **A:** "Oh! Daily Active Users who post at least one story per day, and the 7-day return retention rate."
 
----
+**Scorecard:** Technical `8` · Communication `7` · Confidence `7` · Clarity `8` · Depth `7`
+**Weakness noted:** Good recovery, but missed guardrail metrics like feed cannibalization.
+**Directive:** `move_next_topic` — successful recovery under a structured prompt.
 
-### Transcript 3: Tricky / Edge Case Candidate (Product Manager Intern)
-**Role**: Product Manager Intern | **Focus**: Case Study | **Rounds**: 2
+**Executive Summary:** **68/100** — Moderate Potential, Needs Guidance on Initial Framework Structure
 
-```markdown
-### Round 1 (Medium Difficulty)
-Interviewer Question: "How would you measure the success of launching a new feature like Instagram Stories for a professional network platform?"
-Candidate Answer: "I don't know much about metrics, maybe I'd just ask users if they like it or check if downloads go up."
-
-Evaluator Scorecard:
-- Technical: 3/10 | Communication: 4/10 | Confidence: 3/10 | Clarity: 5/10 | Depth: 2/10
-- Weakness: "Candidate gave an off-topic / evasive 'I don't know' reply without structuring a product metrics framework (DAU, Retention, Adoption Rate)."
-- Follow-up Needed: True
-
-Decision Agent Directive: `probe_deeper`
-- Reasoning: Candidate replied with uncertainty. Providing a simplified framework prompt to test problem-solving resilience.
+</details>
 
 ---
 
-### Round 2 (Medium Difficulty - Structured Recovery)
-Interviewer Question: "Let's break it down step by step. What is one key user engagement action you would track daily to see if people are using the new feature?"
-Candidate Answer: "Oh! Daily Active Users who post at least one story per day, and the retention rate of users who return within 7 days."
+## ✅ Assignment Requirements Mapping
 
-Evaluator Scorecard:
-- Technical: 8/10 | Communication: 7/10 | Confidence: 7/10 | Clarity: 8/10 | Depth: 7/10
-- Weakness: "Good recovery on primary metrics, though didn't mention guardrail metrics like feed cannibalization."
-- Follow-up Needed: False
-
-Decision Agent Directive: `move_next_topic`
-- Reasoning: Candidate successfully recovered when prompted with a structured sub-question.
+| Requirement | Where it's satisfied |
+|---|---|
+| 3+ distinct agents with genuinely different roles | Interviewer, Evaluator, Decision, Coach — see [Agent Roles](#-agent-roles--responsibilities) |
+| Orchestration logic shown, not a disguised chain | `graph/workflow.py` — conditional `StateGraph` routing, see [sequence diagram](#-orchestration-logic) |
+| 5–7 turn interview with intelligent follow-ups | Decision Agent's `probe_deeper` / `move_next_topic` logic |
+| Adaptive difficulty calibration | `increase_difficulty` / `decrease_difficulty` routing rules |
+| Multi-dimensional evaluation (not good/bad) | 5-dimension Evaluator scorecard, structured JSON |
+| Structured outputs (JSON / Markdown) | Pydantic JSON from Evaluator, Markdown report from Coach |
+| Handles vague / off-topic / "I don't know" answers | See Transcript 3 — probe-and-recover flow |
+| CLI or UI interface | Streamlit app (`app.py`) with a live multi-agent inspector |
+| `requirements.txt` | Included at repo root |
+| `prompts/` folder, one file per agent | `prompts/interviewer.txt`, `evaluator.txt`, `decision.txt`, `coach.txt` |
+| README: setup, architecture, design decisions, 3 transcripts | This file |
 
 ---
 
-Executive Report Summary:
-- Overall Score: 68/100
-- Category: Moderate Potential (Requires Guidance on Initial Framework Structure)
-```
+## 🛣 Roadmap
+
+- [ ] Optional RAG grounding with role-specific question banks
+- [ ] Difficulty-aware question bank fallback for API rate limits
+- [ ] Exportable PDF version of the Executive Assessment Report
+- [ ] Multi-role batch mode for practicing several target roles in one session
+
+---
+
+
+---
+
+<p align="center">Built as part of an AI Engineer internship assignment — designing agents that argue, not just agents that answer.</p>
