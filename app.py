@@ -153,9 +153,19 @@ if "messages" not in st.session_state:
 # Sidebar Configuration
 st.sidebar.markdown("### ⚙️ Environment & API")
 
-env_key = os.getenv("GROQ_API_KEY", "")
+# Streamlit Cloud Secrets or Environment Variable
+env_key = ""
+try:
+    if hasattr(st, "secrets") and "GROQ_API_KEY" in st.secrets:
+        env_key = st.secrets["GROQ_API_KEY"]
+except Exception:
+    pass
+
+if not env_key:
+    env_key = os.getenv("GROQ_API_KEY", "")
+
 if env_key and env_key.strip():
-    st.sidebar.success("🔒 API Key Loaded from Environment (.env)")
+    st.sidebar.success("🔒 API Key Loaded from Secrets / Environment")
     api_key_input = st.sidebar.text_input(
         "Override Key (Optional)",
         value="",
@@ -163,7 +173,7 @@ if env_key and env_key.strip():
         help="Credentials loaded securely. Provide text to override."
     )
 else:
-    st.sidebar.warning("API Key required. Set GROQ_API_KEY in .env or below.")
+    st.sidebar.warning("API Key required. Set GROQ_API_KEY in Streamlit Secrets, .env, or below.")
     api_key_input = st.sidebar.text_input(
         "Groq API Key",
         value="",
