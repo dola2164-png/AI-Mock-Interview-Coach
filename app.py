@@ -153,16 +153,23 @@ if "messages" not in st.session_state:
 # Sidebar Configuration
 st.sidebar.markdown("### ⚙️ Environment & API")
 
-# Streamlit Cloud Secrets or Environment Variable
+# Streamlit Cloud Secrets or Environment Variable (100% Exception-Safe)
 env_key = ""
 try:
     if hasattr(st, "secrets") and "GROQ_API_KEY" in st.secrets:
-        env_key = st.secrets["GROQ_API_KEY"]
-except Exception:
+        val = st.secrets["GROQ_API_KEY"]
+        if val and isinstance(val, str):
+            env_key = val.strip()
+except BaseException:
     pass
 
 if not env_key:
-    env_key = os.getenv("GROQ_API_KEY", "")
+    try:
+        env_val = os.getenv("GROQ_API_KEY", "")
+        if env_val and isinstance(env_val, str):
+            env_key = env_val.strip()
+    except BaseException:
+        env_key = ""
 
 if env_key and env_key.strip():
     st.sidebar.success("🔒 API Key Loaded from Secrets / Environment")
@@ -173,12 +180,13 @@ if env_key and env_key.strip():
         help="Credentials loaded securely. Provide text to override."
     )
 else:
-    st.sidebar.warning("API Key required. Set GROQ_API_KEY in Streamlit Secrets, .env, or below.")
+    st.sidebar.info("💡 Enter your Groq API Key below (100% Free):")
     api_key_input = st.sidebar.text_input(
         "Groq API Key",
         value="",
         type="password",
-        placeholder="gsk_••••••••••••••••"
+        placeholder="gsk_••••••••••••••••",
+        help="Get your free key from https://console.groq.com"
     )
 
 api_key = get_api_key(api_key_input)
@@ -201,7 +209,7 @@ start_button = st.sidebar.button("Initialize Assessment", use_container_width=Tr
 
 if start_button:
     if not api_key:
-        st.sidebar.error("Valid Groq API Key required to initialize candidate assessment.")
+        st.sidebar.error("Valid Groq API Key required to initialize candidate assessment. (Get a free key from console.groq.com)")
     else:
         st.session_state.interview_started = True
         st.session_state.interview_complete = False
@@ -215,24 +223,27 @@ if start_button:
         st.session_state.coaching_report = ""
         
         with st.spinner("Initializing Multi-Agent Interviewer Node..."):
-            res = run_interviewer_agent(
-                target_role=target_role,
-                resume_snippet=resume_snippet,
-                interview_type=interview_type,
-                current_difficulty="Medium",
-                decision_action="move_next_topic",
-                question_history=[],
-                api_key=api_key,
-                model_name=model_name
-            )
-            st.session_state.latest_question = res["question"]
-            st.session_state.latest_question_reason = res["reason"]
-            st.session_state.current_difficulty = res.get("difficulty", "Medium")
-            
-            st.session_state.messages.append({
-                "role": "assistant",
-                "content": f"**Question 1 ({st.session_state.current_difficulty} Difficulty):**\n\n{res['question']}"
-            })
+            try:
+                res = run_interviewer_agent(
+                    target_role=target_role,
+                    resume_snippet=resume_snippet,
+                    interview_type=interview_type,
+                    current_difficulty="Medium",
+                    decision_action="move_next_topic",
+                    question_history=[],
+                    api_key=api_key,
+                    model_name=model_name
+                )
+                st.session_state.latest_question = res["question"]
+                st.session_state.latest_question_reason = res["reason"]
+                st.session_state.current_difficulty = res.get("difficulty", "Medium")
+                
+                st.session_state.messages.append({
+                    "role": "assistant",
+                    "content": f"**Question 1 ({st.session_state.current_difficulty} Difficulty):**\n\n{res['question']}"
+                })
+            except Exception as err:
+                st.error(f"Error starting interview session: {str(err)}. Please check your Groq API key.")
         st.rerun()
 
 # Main Enterprise Header
