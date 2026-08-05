@@ -184,7 +184,7 @@ ai-interview-coach/
 
 ```bash
 # Clone and enter the project
-git clone https://github.com/<your-username>/ai-interview-coach.git
+git clone https://github.com/dola2164-png/ai-interview-coach.git
 cd ai-interview-coach
 
 # Create & activate a virtual environment
