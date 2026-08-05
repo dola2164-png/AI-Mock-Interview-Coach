@@ -8,7 +8,6 @@ Built with **LangGraph** · **Streamlit** · **Groq (Llama 3.3 70B)**
 [![LangGraph](https://img.shields.io/badge/LangGraph-StateGraph-1C3C3C)](https://www.langchain.com/langgraph)
 [![Streamlit](https://img.shields.io/badge/Streamlit-App-FF4B4B?logo=streamlit&logoColor=white)](https://streamlit.io/)
 [![Groq](https://img.shields.io/badge/Groq-Llama%203.3%2070B-F55036)](https://groq.com/)
-[![License](https://img.shields.io/badge/License-MIT-green.svg)](#license)
 
 > Give it a target role, a resume snippet, and a focus area — it runs a live 5–7 turn interview that probes weak answers, rewards strong ones, and ends with a structured coaching report and a 7-day practice plan.
 
@@ -17,6 +16,7 @@ Built with **LangGraph** · **Streamlit** · **Groq (Llama 3.3 70B)**
 ## 📖 Table of Contents
 
 - [Why This Exists](#-why-this-exists)
+- [Screenshot](#-screenshot)
 - [Architecture Overview](#-architecture-overview)
 - [Agent Roles & Responsibilities](#-agent-roles--responsibilities)
 - [Orchestration Logic](#-orchestration-logic)
@@ -35,6 +35,15 @@ Most "mock interview" tools ask a fixed list of questions and grade on vibes. Th
 
 ---
 
+## 📸 Screenshot
+
+<img width="1920" height="1200" alt="image" src="https://github.com/user-attachments/assets/c6920bd7-d3b4-4213-a5ba-e28b4a028d1c" />
+*Live multi-agent interview session — question panel, running scorecard, and agent inspector side by side.*
+
+> Save your screenshot as `assets/frontend-screenshot.png` in the repo root (create the `assets/` folder if it doesn't exist) — this line will then render it automatically on GitHub.
+
+---
+
 ## 🏗 Architecture Overview
 
 Four specialized agents are coordinated through a stateful **LangGraph `StateGraph`**, with the Decision Agent acting as the conditional router that keeps the interview looping until a stopping condition is met.
@@ -46,7 +55,7 @@ flowchart TD
     subgraph LOOP["Interview Loop — repeats for 5–7 rounds"]
         direction TB
         INT["🎤 Agent 1: Interviewer\nAsks tailored question"] --> EVAL
-        EVAL["📊 Agent 2: Evaluator\nScores answer (5 dimensions)\n→ structured JSON"] --> DEC
+        EVAL["📊 Agent 2: Evaluator\nScores answer, 5 dimensions\nstructured JSON"] --> DEC
         DEC{"🧭 Agent 3: Decision Agent\nReads scores, picks next action"}
     end
 
@@ -56,14 +65,21 @@ flowchart TD
     DEC -- "move_next_topic" --> INT
     DEC -- "max rounds reached" --> COACH
 
-    COACH["🧑‍🏫 Agent 4: Coach\nSynthesizes full transcript"] --> REPORT["📄 Executive Assessment Report\n(Markdown)"]
+    COACH["🧑‍🏫 Agent 4: Coach\nSynthesizes full transcript"] --> REPORT["📄 Executive Assessment Report\nMarkdown"]
 
-    style UI fill:#e8f0fe,stroke:#4285f4
-    style INT fill:#fef7e0,stroke:#f9ab00
-    style EVAL fill:#fce8e6,stroke:#ea4335
-    style DEC fill:#e6f4ea,stroke:#34a853
-    style COACH fill:#f3e8fd,stroke:#a142f4
-    style REPORT fill:#e8f0fe,stroke:#4285f4
+    classDef ui fill:#1565C0,stroke:#0D47A1,stroke-width:2px,color:#ffffff
+    classDef interviewer fill:#E65100,stroke:#BF360C,stroke-width:2px,color:#ffffff
+    classDef evaluator fill:#B71C1C,stroke:#7F0000,stroke-width:2px,color:#ffffff
+    classDef decision fill:#1B5E20,stroke:#0B3D0B,stroke-width:2px,color:#ffffff
+    classDef coach fill:#4A148C,stroke:#2E0854,stroke-width:2px,color:#ffffff
+    classDef report fill:#1565C0,stroke:#0D47A1,stroke-width:2px,color:#ffffff
+
+    class UI ui
+    class INT interviewer
+    class EVAL evaluator
+    class DEC decision
+    class COACH coach
+    class REPORT report
 ```
 
 **State flows through a single `InterviewState` object** (see `graph/state.py`) that accumulates the transcript, running scores, current difficulty, and topic history — so every agent has full context without re-fetching anything.
