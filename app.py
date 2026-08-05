@@ -1,3 +1,15 @@
+# Monkeypatch Starlette GZipResponder for Streamlit Cloud Starlette 1.4+ compatibility
+try:
+    import starlette.middleware.gzip
+    _original_gzip_init = starlette.middleware.gzip.GZipResponder.__init__
+    def _patched_gzip_init(self, app, minimum_size=500, compresslevel=9, **kwargs):
+        if "thread_minimum_size" not in kwargs:
+            kwargs["thread_minimum_size"] = 1024
+        return _original_gzip_init(self, app, minimum_size=minimum_size, compresslevel=compresslevel, **kwargs)
+    starlette.middleware.gzip.GZipResponder.__init__ = _patched_gzip_init
+except Exception:
+    pass
+
 import streamlit as st
 import os
 import json
